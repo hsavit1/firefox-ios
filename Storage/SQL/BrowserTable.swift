@@ -500,17 +500,61 @@ public class BrowserTable: Table {
         }
 
         if from < 12 && to >= 12 {
-            let _ =
+            let bookmarksLocal = getBookmarksTableCreationStringForTable(TableBookmarksLocal, withAdditionalColumns: self.iconColumns)
+            let bookmarksLocalStructure = getBookmarksStructureTableCreationStringForTable(TableBookmarksLocalStructure, referencingMirror: TableBookmarksLocal)
+            let bookmarksMirror = getBookmarksTableCreationStringForTable(TableBookmarksMirror, withAdditionalColumns: self.mirrorColumns + self.iconColumns)
+            let bookmarksMirrorStructure = getBookmarksStructureTableCreationStringForTable(TableBookmarksMirrorStructure, referencingMirror: TableBookmarksMirror)
+
+            let indexLocalStructureParentIdx = "CREATE INDEX IF NOT EXISTS \(IndexBookmarksLocalStructureParentIdx) " +
+                "ON \(TableBookmarksLocalStructure) (parent, idx)"
+            let indexBufferStructureParentIdx = "CREATE INDEX IF NOT EXISTS \(IndexBookmarksBufferStructureParentIdx) " +
+                "ON \(TableBookmarksBufferStructure) (parent, idx)"
+            let indexMirrorStructureParentIdx = "CREATE INDEX IF NOT EXISTS \(IndexBookmarksMirrorStructureParentIdx) " +
+                "ON \(TableBookmarksMirrorStructure) (parent, idx)"
+
+            // Skip folders. The only folders are our roots, and we'll create those later.
+            let migrateLocal =
             "INSERT INTO \(TableBookmarksLocal) (id, guid, type, bmkUri, title, faviconID, parentid, parentName) " +
             "SELECT id, guid, type, url, title, faviconID" +
             "(SELECT guid FROM \(_TableBookmarks) AS b WHERE b.id = id LIMIT 1), " +
-            "(SELECT title FROM \(_TableBookmarks) AS b WHERE b.id = id LIMIT 1)"
-            // TODO:
-            // Drop indices.
-            // Move bookmarksMirror* to bookmarksBuffer.
-            // Move bookmarks to bookmarksLocal and create structure as needed.
-            // Recreate indices.
-            // Trigger a sync?
+            "(SELECT title FROM \(_TableBookmarks) AS b WHERE b.id = id LIMIT 1) " +
+            "WHERE type IS NOT \(BookmarkNodeType.Folder.rawValue)"
+
+            let prep: [String?] = [
+                // Drop indices.
+                "DROP INDEX IF EXISTS idx_bookmarksMirrorStructure_parent_idx",
+
+                // Rename the old mirror tables to buffer.
+                // The v11 one is the same shape as the current buffer table.
+                "ALTER TABLE \(TableBookmarksMirror) RENAME TO \(TableBookmarksBuffer)",
+                "ALTER TABLE \(TableBookmarksMirrorStructure) RENAME TO \(TableBookmarksBufferStructure)",
+
+                // Create the new mirror and local tables.
+                bookmarksLocal,
+                bookmarksMirror,
+                bookmarksLocalStructure,
+                bookmarksMirrorStructure,
+            ]
+
+            let migrate = [
+                // Migrate existing local bookmarks.
+                migrateLocal,
+
+                // Drop the old bookmarks table.
+                "DROP TABLE \(_TableBookmarks)",
+
+                // Create indices for each structure table.
+                indexBufferStructureParentIdx,
+                indexLocalStructureParentIdx,
+                indexMirrorStructureParentIdx,
+            ]
+
+            if !self.runValidQueries(db, queries: prep) ||
+               !self.prepopulateRootFolders(db) ||
+               !self.run(db, queries: migrate) {
+                return false
+            }
+            // TODO: trigger a sync?
         }
 
         return true
