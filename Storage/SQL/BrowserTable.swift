@@ -209,6 +209,7 @@ public class BrowserTable: Table {
                ") "
     }
 
+    let iconColumns = ", faviconID INTEGER REFERENCES \(TableFavicons)(id) ON DELETE SET NULL"
     let mirrorColumns = ", server_modified INTEGER NOT NULL" +    // Milliseconds.
                         ", hasDupe TINYINT NOT NULL DEFAULT 0"    // Boolean, 0 (false) if deleted.
 
@@ -345,11 +346,14 @@ public class BrowserTable: Table {
         "\(TableHistory), \(ViewWidestFaviconsForSites) AS icons WHERE " +
         "\(TableHistory).id = icons.siteID "
 
-        let bookmarksLocal = getBookmarksTableCreationStringForTable(TableBookmarksLocal, withAdditionalColumns: "")
+        // Locally we track faviconID.
+        // Local changes end up in the mirror, so we track it there too.
+        // The buffer and the mirror additionally track some server metadata.
+        let bookmarksLocal = getBookmarksTableCreationStringForTable(TableBookmarksLocal, withAdditionalColumns: self.iconColumns)
         let bookmarksLocalStructure = getBookmarksStructureTableCreationStringForTable(TableBookmarksLocalStructure, referencingMirror: TableBookmarksLocal)
         let bookmarksBuffer = getBookmarksTableCreationStringForTable(TableBookmarksBuffer, withAdditionalColumns: self.mirrorColumns)
         let bookmarksBufferStructure = getBookmarksStructureTableCreationStringForTable(TableBookmarksBufferStructure, referencingMirror: TableBookmarksBuffer)
-        let bookmarksMirror = getBookmarksTableCreationStringForTable(TableBookmarksMirror, withAdditionalColumns: self.mirrorColumns)
+        let bookmarksMirror = getBookmarksTableCreationStringForTable(TableBookmarksMirror, withAdditionalColumns: self.mirrorColumns + self.iconColumns)
         let bookmarksMirrorStructure = getBookmarksStructureTableCreationStringForTable(TableBookmarksMirrorStructure, referencingMirror: TableBookmarksMirror)
 
         let indexLocalStructureParentIdx = "CREATE INDEX IF NOT EXISTS \(IndexBookmarksLocalStructureParentIdx) " +
@@ -477,8 +481,8 @@ public class BrowserTable: Table {
 
         if from < 12 && to >= 12 {
             let _ =
-            "INSERT INTO \(TableBookmarksLocal) (id, guid, type, bmkUri, title, parentid, parentName) " +
-            "SELECT id, guid, type, url, title, " +
+            "INSERT INTO \(TableBookmarksLocal) (id, guid, type, bmkUri, title, faviconID, parentid, parentName) " +
+            "SELECT id, guid, type, url, title, faviconID" +
             "(SELECT guid FROM \(_TableBookmarks) AS b WHERE b.id = id LIMIT 1), " +
             "(SELECT title FROM \(_TableBookmarks) AS b WHERE b.id = id LIMIT 1)"
             // TODO:
