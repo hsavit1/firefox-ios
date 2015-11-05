@@ -230,7 +230,8 @@ public class BrowserTable: Table {
     }
 
     let iconColumns = ", faviconID INTEGER REFERENCES \(TableFavicons)(id) ON DELETE SET NULL"
-    let mirrorColumns = ", server_modified INTEGER NOT NULL" +    // Milliseconds.
+    let mirrorColumns = ", is_overridden TINYINT NOT NULL DEFAULT 0"
+    let metadataColumns = ", server_modified INTEGER NOT NULL" +    // Milliseconds.
                         ", hasDupe TINYINT NOT NULL DEFAULT 0"    // Boolean, 0 (false) if deleted.
 
     func getBookmarksTableCreationStringForTable(table: String, withAdditionalColumns: String="", forVersion version: Int = BrowserTable.DefaultVersion) -> String? {
@@ -371,9 +372,9 @@ public class BrowserTable: Table {
         // The buffer and the mirror additionally track some server metadata.
         let bookmarksLocal = getBookmarksTableCreationStringForTable(TableBookmarksLocal, withAdditionalColumns: self.iconColumns)
         let bookmarksLocalStructure = getBookmarksStructureTableCreationStringForTable(TableBookmarksLocalStructure, referencingMirror: TableBookmarksLocal)
-        let bookmarksBuffer = getBookmarksTableCreationStringForTable(TableBookmarksBuffer, withAdditionalColumns: self.mirrorColumns)
+        let bookmarksBuffer = getBookmarksTableCreationStringForTable(TableBookmarksBuffer, withAdditionalColumns: self.metadataColumns)
         let bookmarksBufferStructure = getBookmarksStructureTableCreationStringForTable(TableBookmarksBufferStructure, referencingMirror: TableBookmarksBuffer)
-        let bookmarksMirror = getBookmarksTableCreationStringForTable(TableBookmarksMirror, withAdditionalColumns: self.mirrorColumns + self.iconColumns)
+        let bookmarksMirror = getBookmarksTableCreationStringForTable(TableBookmarksMirror, withAdditionalColumns: self.metadataColumns + self.mirrorColumns + self.iconColumns)
         let bookmarksMirrorStructure = getBookmarksStructureTableCreationStringForTable(TableBookmarksMirrorStructure, referencingMirror: TableBookmarksMirror)
 
         let indexLocalStructureParentIdx = "CREATE INDEX IF NOT EXISTS \(IndexBookmarksLocalStructureParentIdx) " +
@@ -502,7 +503,7 @@ public class BrowserTable: Table {
         if from < 12 && to >= 12 {
             let bookmarksLocal = getBookmarksTableCreationStringForTable(TableBookmarksLocal, withAdditionalColumns: self.iconColumns)
             let bookmarksLocalStructure = getBookmarksStructureTableCreationStringForTable(TableBookmarksLocalStructure, referencingMirror: TableBookmarksLocal)
-            let bookmarksMirror = getBookmarksTableCreationStringForTable(TableBookmarksMirror, withAdditionalColumns: self.mirrorColumns + self.iconColumns)
+            let bookmarksMirror = getBookmarksTableCreationStringForTable(TableBookmarksMirror, withAdditionalColumns: self.metadataColumns + self.mirrorColumns + self.iconColumns)
             let bookmarksMirrorStructure = getBookmarksStructureTableCreationStringForTable(TableBookmarksMirrorStructure, referencingMirror: TableBookmarksMirror)
 
             let indexLocalStructureParentIdx = "CREATE INDEX IF NOT EXISTS \(IndexBookmarksLocalStructureParentIdx) " +
