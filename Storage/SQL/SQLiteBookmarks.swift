@@ -177,10 +177,11 @@ public class SQLiteBookmarks: BookmarksModelFactory {
         self.favicons = FaviconsTable<Favicon>()
     }
 
+    // TODO: this requires a rewrite for structure.
     private func getChildrenWhere(whereClause: String, args: Args, includeIcon: Bool) -> Cursor<BookmarkNode> {
         var err: NSError? = nil
         return db.withReadableConnection(&err) { (conn, err) -> Cursor<BookmarkNode> in
-            let inner = "SELECT id, type, guid, url, title, faviconID FROM \(TableBookmarks) WHERE \(whereClause)"
+            let inner = "SELECT id, type, guid, bmkUri AS url, title, faviconID FROM \(TableBookmarksLocal) WHERE \(whereClause)"
 
             let sql: String
             if includeIcon {
@@ -198,15 +199,15 @@ public class SQLiteBookmarks: BookmarksModelFactory {
     }
 
     private func getRootChildren() -> Cursor<BookmarkNode> {
-        let args: Args = [BookmarkRoots.RootID, BookmarkRoots.RootID]
-        let sql = "parent = ? AND id IS NOT ?"
+        let args: Args = [BookmarkRoots.RootGUID, BookmarkRoots.RootID]
+        let sql = "parentid = ? AND id IS NOT ?"
         return self.getChildrenWhere(sql, args: args, includeIcon: true)
     }
 
     // TODO: merge mirror table.
     private func getChildren(guid: String) -> Cursor<BookmarkNode> {
         let args: Args = [guid]
-        let sql = "parent IS NOT NULL AND parent = (SELECT id FROM \(TableBookmarksLocal) WHERE guid = ?)"
+        let sql = "parent = ?"
         return self.getChildrenWhere(sql, args: args, includeIcon: true)
     }
 
@@ -320,6 +321,7 @@ extension SQLiteBookmarks: ShareToDestination {
                     urlString,
                     title,
                     BookmarkRoots.MobileID,
+                    BookmarksFolderTitleMobile,
                 ]
 
                 // If the caller didn't provide an icon (and they usually don't!),
@@ -333,7 +335,7 @@ extension SQLiteBookmarks: ShareToDestination {
                     args.append(icon)
                 }
 
-                let sql = "INSERT INTO \(TableBookmarks) (guid, type, url, title, parent, faviconID) VALUES (?, ?, ?, ?, ?, \(iconValue))"
+                let sql = "INSERT INTO \(TableBookmarksLocal) (guid, type, bmkUri, title, parentid, parentName, faviconID) VALUES (?, ?, ?, ?, ?, ?, \(iconValue))"
                 err = conn.executeChange(sql, withArgs: args)
                 if let err = err {
                     log.error("Error inserting \(urlString). Got \(err).")
@@ -365,7 +367,7 @@ extension SQLiteBookmarks: ShareToDestination {
 // TODO: also search mirrored bookmarks.
 extension SQLiteBookmarks: SearchableBookmarks {
     public func bookmarksByURL(url: NSURL) -> Deferred<Maybe<Cursor<BookmarkItem>>> {
-        let inner = "SELECT id, type, guid, url, title, faviconID FROM \(TableBookmarks) WHERE type = \(BookmarkNodeType.Bookmark.rawValue) AND url = ?"
+        let inner = "SELECT id, type, guid, bmkUri AS url, title, faviconID FROM \(TableBookmarksLocal) WHERE type = \(BookmarkNodeType.Bookmark.rawValue) AND url = ?"
         let sql =
         "SELECT bookmarks.id AS id, bookmarks.type AS type, guid, bookmarks.url AS url, title, " +
         "favicons.url AS iconURL, favicons.date AS iconDate, favicons.type AS iconType " +
