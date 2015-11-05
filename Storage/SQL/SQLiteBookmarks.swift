@@ -203,9 +203,10 @@ public class SQLiteBookmarks: BookmarksModelFactory {
         return self.getChildrenWhere(sql, args: args, includeIcon: true)
     }
 
+    // TODO: merge mirror table.
     private func getChildren(guid: String) -> Cursor<BookmarkNode> {
         let args: Args = [guid]
-        let sql = "parent IS NOT NULL AND parent = (SELECT id FROM \(TableBookmarks) WHERE guid = ?)"
+        let sql = "parent IS NOT NULL AND parent = (SELECT id FROM \(TableBookmarksLocal) WHERE guid = ?)"
         return self.getChildrenWhere(sql, args: args, includeIcon: true)
     }
 
@@ -259,7 +260,7 @@ public class SQLiteBookmarks: BookmarksModelFactory {
 
     public func isBookmarked(url: String) -> Deferred<Maybe<Bool>> {
         var err: NSError?
-        let sql = "SELECT id FROM \(TableBookmarks) WHERE url = ? LIMIT 1"
+        let sql = "SELECT id FROM \(TableBookmarksLocal) UNION ALL \(TableBookmarksMirror) WHERE bmkUri = ? LIMIT 1"
         let args: Args = [url]
 
         let c = db.withReadableConnection(&err) { (conn, err) -> Cursor<Int> in
@@ -272,27 +273,30 @@ public class SQLiteBookmarks: BookmarksModelFactory {
         return deferMaybe(DatabaseError(err: err))
     }
 
+    // TODO: rewrite me.
     public func clearBookmarks() -> Success {
         return self.db.run([
-            ("DELETE FROM \(TableBookmarks) WHERE parent IS NOT ?", [BookmarkRoots.RootID]),
+            ("DELETE FROM \(TableBookmarksLocal) WHERE parent IS NOT ?", [BookmarkRoots.RootID]),
             self.favicons.getCleanupCommands()
         ])
     }
 
+    // TODO: rewrite me.
     public func removeByURL(url: String) -> Success {
         return self.db.run([
-            ("DELETE FROM \(TableBookmarks) WHERE url = ?", [url]),
+            ("DELETE FROM \(TableBookmarksLocal) WHERE url = ?", [url]),
         ])
     }
 
+    // TODO: rewrite me.
     public func remove(bookmark: BookmarkNode) -> Success {
         let sql: String
         let args: Args
         if let id = bookmark.id {
-            sql = "DELETE FROM \(TableBookmarks) WHERE id = ?"
+            sql = "DELETE FROM \(TableBookmarksLocal) WHERE id = ?"
             args = [id]
         } else {
-            sql = "DELETE FROM \(TableBookmarks) WHERE guid = ?"
+            sql = "DELETE FROM \(TableBookmarksLocal) WHERE guid = ?"
             args = [bookmark.guid]
         }
 
