@@ -207,7 +207,7 @@ public class SQLiteBookmarks: BookmarksModelFactory {
     // TODO: merge mirror table.
     private func getChildren(guid: String) -> Cursor<BookmarkNode> {
         let args: Args = [guid]
-        let sql = "parent = ?"
+        let sql = "parentid = ?"
         return self.getChildrenWhere(sql, args: args, includeIcon: true)
     }
 
@@ -261,8 +261,12 @@ public class SQLiteBookmarks: BookmarksModelFactory {
 
     public func isBookmarked(url: String) -> Deferred<Maybe<Bool>> {
         var err: NSError?
-        let sql = "SELECT id FROM \(TableBookmarksLocal) UNION ALL \(TableBookmarksMirror) WHERE bmkUri = ? LIMIT 1"
-        let args: Args = [url]
+        let sql = "SELECT id FROM " +
+            "(SELECT id FROM \(TableBookmarksLocal) WHERE bmkUri = ? " +
+            " UNION ALL " +
+            " SELECT id FROM \(TableBookmarksMirror) WHERE bmkUri = ?) " +
+            "LIMIT 1"
+        let args: Args = [url, url]
 
         let c = db.withReadableConnection(&err) { (conn, err) -> Cursor<Int> in
             return conn.executeQuery(sql, factory: { $0["id"] as! Int }, withArgs: args)
@@ -277,7 +281,7 @@ public class SQLiteBookmarks: BookmarksModelFactory {
     // TODO: rewrite me.
     public func clearBookmarks() -> Success {
         return self.db.run([
-            ("DELETE FROM \(TableBookmarksLocal) WHERE parent IS NOT ?", [BookmarkRoots.RootID]),
+            ("DELETE FROM \(TableBookmarksLocal) WHERE parentid IS NOT ?", [BookmarkRoots.RootGUID]),
             self.favicons.getCleanupCommands()
         ])
     }
@@ -285,7 +289,7 @@ public class SQLiteBookmarks: BookmarksModelFactory {
     // TODO: rewrite me.
     public func removeByURL(url: String) -> Success {
         return self.db.run([
-            ("DELETE FROM \(TableBookmarksLocal) WHERE url = ?", [url]),
+            ("DELETE FROM \(TableBookmarksLocal) WHERE bmkUri = ?", [url]),
         ])
     }
 
@@ -315,12 +319,13 @@ extension SQLiteBookmarks: ShareToDestination {
             func insertBookmark(icon: Int) -> Success {
                 log.debug("Inserting bookmark with specified icon \(icon).")
                 let urlString = url.absoluteString
+                let newGUID = Bytes.generateGUID()
                 var args: Args = [
-                    Bytes.generateGUID(),
+                    newGUID,
                     BookmarkNodeType.Bookmark.rawValue,
                     urlString,
                     title,
-                    BookmarkRoots.MobileID,
+                    BookmarkRoots.MobileFolderGUID,
                     BookmarksFolderTitleMobile,
                 ]
 
@@ -338,9 +343,22 @@ extension SQLiteBookmarks: ShareToDestination {
                 let sql = "INSERT INTO \(TableBookmarksLocal) (guid, type, bmkUri, title, parentid, parentName, faviconID) VALUES (?, ?, ?, ?, ?, ?, \(iconValue))"
                 err = conn.executeChange(sql, withArgs: args)
                 if let err = err {
-                    log.error("Error inserting \(urlString). Got \(err).")
+                    log.error("Error inserting \(newGUID). Got \(err).")
                     return deferMaybe(DatabaseError(err: err))
                 }
+
+                // Now add to the structure table.
+                // TODO: mark as modified.
+                let structure = "INSERT INTO \(TableBookmarksLocalStructure) (parent, child, idx) " +
+                "VALUES (?, ?, 0)"      // TODO: a real position!
+                let structureArgs: Args = [BookmarkRoots.MobileFolderGUID, newGUID]
+
+                err = conn.executeChange(structure, withArgs: structureArgs)
+                if let err = err {
+                    log.error("Error adding structure for \(newGUID). Got \(err).")
+                    return deferMaybe(DatabaseError(err: err))
+                }
+
                 return succeed()
             }
 
@@ -557,13 +575,16 @@ public class SQLiteBookmarkMirrorStorage: BookmarkMirrorStorage {
 
 extension SQLiteBookmarkMirrorStorage: BookmarksModelFactory {
     private func getDesktopRoots() -> Deferred<Maybe<Cursor<BookmarkNode>>> {
-        let args: Args = [BookmarkRoots.RootGUID]
+        // We deliberately exclude the mobile folder, because we're inverting the containment
+        // relationship here.
+        let args: Args = [BookmarkRoots.RootGUID, BookmarkRoots.MobileFolderGUID]
         let folderType = BookmarkNodeType.Folder.rawValue
         let sql =
         "SELECT id, guid, type, title FROM \(TableBookmarksMirror) WHERE " +
         "parentid = ? AND " +
         "is_deleted = 0 AND " +
         "type = \(folderType) AND " +
+        "guid IS NOT ? AND " +
         "title IS NOT '' " +
         "ORDER BY guid ASC"
         return self.db.runQuery(sql, args: args, factory: MirrorBookmarkNodeFactory.factory)
