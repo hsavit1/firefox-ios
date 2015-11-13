@@ -15,4 +15,10 @@ struct DebugSettingsBundleOptions {
     static var disableLocalWebServer: Bool {
         return NSUserDefaults.standardUserDefaults().boolForKey("SettingsBundleDisableLocalWebServer") ?? false
     }
+
+    /// When enabled, the app launch will be replaced with the mail compose view appearing with the device
+    /// logs pre-attached. When the mail is sent, the app continues launching normally.
+    static var emailLogsOnLaunch: Bool {
+        return NSUserDefaults.standardUserDefaults().boolForKey("SettingsBundleEmailLogsOnLaunch") ?? false
+    }
 }

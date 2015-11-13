@@ -13,7 +13,7 @@ if AppConstants.IsRunningTest {
     case .Aurora:
         appDelegate = AuroraAppDelegate.self
     case .Developer:
-        appDelegate = AppDelegate.self
+        appDelegate = DebuggingAppDelegate.self
     case .Release:
         appDelegate = AppDelegate.self
     }
