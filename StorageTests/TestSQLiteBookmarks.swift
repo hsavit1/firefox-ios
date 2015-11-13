@@ -18,8 +18,20 @@ private func getBrowserDB(filename: String, files: FileAccessor) -> BrowserDB? {
 }
 
 class TestSQLiteBookmarks: XCTestCase {
+    let files = MockFiles()
+
+    override func tearDown() {
+        do {
+            try self.files.remove("TSQLBtestBookmarks.db")
+        } catch {}
+
+        do {
+            try self.files.remove("TSQLBtestMirrorStorage.db")
+        } catch {}
+    }
+
     func testBookmarks() {
-        guard let db = getBrowserDB("browser.db", files: MockFiles()) else {
+        guard let db = getBrowserDB("TSQLBtestBookmarks.db", files: self.files) else {
             XCTFail("Unable to create browser DB.")
             return
         }
@@ -36,7 +48,7 @@ class TestSQLiteBookmarks: XCTestCase {
     }
 
     func testMirrorStorage() {
-        guard let db = getBrowserDB("browser.db", files: MockFiles()) else {
+        guard let db = getBrowserDB("TSQLBtestMirrorStorage.db", files: self.files) else {
             XCTFail("Unable to create browser DB.")
             return
         }
